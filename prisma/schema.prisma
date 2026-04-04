@@ -1,0 +1,456 @@
+// =============================================================================
+// Regenera Grazing OS — Prisma Schema (Phase 1)
+// =============================================================================
+// Multi-tenant SaaS: single database + tenant_id strategy
+// All tenant-scoped tables include tenantId for Row Level Security
+// =============================================================================
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  directUrl  = env("DIRECT_URL")
+  extensions = [postgis, uuidOssp(map: "uuid-ossp")]
+}
+
+// =============================================================================
+// PLATFORM LEVEL — Not tenant-scoped
+// =============================================================================
+
+/// Subscription plans available on the platform
+model Plan {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique // "starter", "professional", "enterprise"
+  displayName String
+  description String?
+  
+  // Limits
+  maxUsers     Int @default(3)
+  maxFarms     Int @default(1)
+  maxPaddocks  Int @default(20)
+  maxStorage   Int @default(1024) // MB
+  
+  // Feature flags
+  gisAdvanced         Boolean @default(false)
+  longTermMonitoring  Boolean @default(false)
+  documentUpload      Boolean @default(false)
+  traceabilityLayer   Boolean @default(false)
+  exportAdvanced      Boolean @default(false)
+  apiAccess           Boolean @default(false)
+  whiteLabel          Boolean @default(false)
+  
+  // Pricing (cents to avoid floating point)
+  priceMonthly  Int @default(0) // in USD cents
+  priceYearly   Int @default(0) // in USD cents
+  
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenants Tenant[]
+
+  @@map("plans")
+}
+
+// =============================================================================
+// TENANT LEVEL — Organization / Company
+// =============================================================================
+
+/// A tenant represents an organization (farm company, consultancy, NGO, etc.)
+model Tenant {
+  id          String  @id @default(uuid()) @db.Uuid
+  name        String
+  slug        String  @unique // URL-friendly identifier
+  description String?
+  
+  // Contact
+  email    String?
+  phone    String?
+  website  String?
+  country  String  @default("CL")
+  timezone String  @default("America/Santiago")
+  locale   String  @default("es")
+  
+  // Subscription
+  planId         String   @db.Uuid
+  plan           Plan     @relation(fields: [planId], references: [id])
+  subscriptionStatus SubscriptionStatus @default(TRIAL)
+  trialEndsAt    DateTime?
+  
+  // Metadata
+  logoUrl   String?
+  settings  Json     @default("{}")
+  isActive  Boolean  @default(true)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  memberships TenantMembership[]
+  invitations TenantInvitation[]
+  auditLogs   AuditLog[]
+  wholeUnderManagements WholeUnderManagement[]
+  farms       Farm[]
+
+  @@index([slug])
+  @@index([isActive])
+  @@map("tenants")
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  SUSPENDED
+}
+
+// =============================================================================
+// USER & AUTH — NextAuth.js compatible + multi-tenant membership
+// =============================================================================
+
+/// User account — platform-level, can belong to multiple tenants
+model User {
+  id            String    @id @default(uuid()) @db.Uuid
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  passwordHash  String?   // For credential-based auth
+  
+  // Platform role
+  platformRole PlatformRole @default(USER)
+  
+  isActive  Boolean  @default(true)
+  lastLoginAt DateTime?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // NextAuth relations
+  accounts Account[]
+  sessions Session[]
+  
+  // Multi-tenant relations
+  memberships TenantMembership[]
+
+  @@index([email])
+  @@map("users")
+}
+
+enum PlatformRole {
+  SUPER_ADMIN // Platform-wide super admin
+  USER        // Regular user (tenant roles define access)
+}
+
+/// Tenant membership — links a user to a tenant with a specific role
+model TenantMembership {
+  id       String @id @default(uuid()) @db.Uuid
+  
+  userId   String @db.Uuid
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  tenantId String @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  
+  role     TenantRole @default(FIELD_OPERATOR)
+  
+  isActive  Boolean  @default(true)
+  joinedAt  DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, tenantId])
+  @@index([tenantId])
+  @@index([userId])
+  @@map("tenant_memberships")
+}
+
+enum TenantRole {
+  OWNER           // Full control of tenant
+  FARM_MANAGER    // Manages farms, paddocks, herds, planning
+  FIELD_OPERATOR  // Daily field logs, observations
+  ADVISOR         // Read + plan + monitor (external consultant)
+  REVIEWER        // Read-only auditor
+}
+
+/// Invitation to join a tenant
+model TenantInvitation {
+  id       String @id @default(uuid()) @db.Uuid
+  
+  tenantId String @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  
+  email     String
+  role      TenantRole @default(FIELD_OPERATOR)
+  token     String     @unique
+  
+  expiresAt DateTime
+  acceptedAt DateTime?
+  
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([token])
+  @@index([email])
+  @@map("tenant_invitations")
+}
+
+// =============================================================================
+// NEXTAUTH.JS REQUIRED TABLES
+// =============================================================================
+
+model Account {
+  id                String  @id @default(uuid()) @db.Uuid
+  userId            String  @db.Uuid
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(uuid()) @db.Uuid
+  sessionToken String   @unique
+  userId       String   @db.Uuid
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// =============================================================================
+// PHASE 2A: WHOLE UNDER MANAGEMENT + HOLISTIC CONTEXT
+// =============================================================================
+
+/// The Whole Under Management (Entero Bajo Manejo) — the indivisible
+/// production unit. In Holistic Management, this is the "cell" that
+/// contains all land, animals, and resources managed as one system.
+/// A tenant can have multiple WUMs (e.g., separate grazing cells).
+model WholeUnderManagement {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  name        String   // "Célula Pirque", "Unidad Río Claro"
+  description String?  @db.Text
+  
+  // Exploitation type
+  exploitationType ExploitationType @default(PRIMARY_PRODUCTION)
+  
+  // Total area (sum of all farms, but can be set manually)
+  totalAreaHa  Float?  // Hectares — fila 35 of Savory chart
+  
+  // Climate baseline (for the whole cell)
+  annualRainfallMm    Float?  // Fila 37 — precipitación promedio anual
+  seasonRainfallMm    Float?  // Fila 38 — precipitación promedio estación
+  
+  // Status
+  isActive  Boolean  @default(true)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  holisticContext  HolisticContext?
+  decisionMakers   DecisionMaker[]
+  farms            Farm[]
+
+  @@index([tenantId])
+  @@index([tenantId, isActive])
+  @@map("whole_under_management")
+}
+
+/// How the production unit operates commercially
+enum ExploitationType {
+  PRIMARY_PRODUCTION   // Solo produce y vende materia prima
+  VALUE_ADDED          // Procesa y da valor agregado (queso, vino, etc.)
+  MIXED                // Ambos: producción primaria + procesamiento
+}
+
+/// The Holistic Context — the foundational decision framework.
+/// Contains the three pillars: Quality of Life, Forms of Production,
+/// and Future Resource Base. One per Whole Under Management.
+model HolisticContext {
+  id    String @id @default(uuid()) @db.Uuid
+  
+  wumId String @unique @db.Uuid
+  wum   WholeUnderManagement @relation(fields: [wumId], references: [id], onDelete: Cascade)
+  
+  tenantId String @db.Uuid
+  
+  // -------------------------------------------------------------------------
+  // Pilar 1: Calidad de Vida (Quality of Life)
+  // -------------------------------------------------------------------------
+  // What do the decision makers want their lives to be like?
+  qualityOfLife String? @db.Text
+  
+  // -------------------------------------------------------------------------
+  // Pilar 2: Formas de Producción (Forms of Production)  
+  // -------------------------------------------------------------------------
+  // What must be produced (physically, financially, services) to sustain
+  // the quality of life described above?
+  formsOfProduction String? @db.Text
+  
+  // -------------------------------------------------------------------------
+  // Pilar 3: Futura Base de Recursos (Future Resource Base)
+  // -------------------------------------------------------------------------
+  // What must the resource base (land, water, community, etc.) look like
+  // far into the future to sustain what is described above?
+  futureResourceBase String? @db.Text
+  
+  // -------------------------------------------------------------------------
+  // Additional notes and reflections
+  // -------------------------------------------------------------------------
+  notes String? @db.Text
+  
+  // Last time the context was reviewed/updated by the planning team
+  lastReviewedAt DateTime?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@map("holistic_contexts")
+}
+
+/// Decision makers — people who participate in defining the holistic context
+/// and making management decisions for a Whole Under Management.
+model DecisionMaker {
+  id    String @id @default(uuid()) @db.Uuid
+  
+  wumId String @db.Uuid
+  wum   WholeUnderManagement @relation(fields: [wumId], references: [id], onDelete: Cascade)
+  
+  tenantId String @db.Uuid
+  
+  name     String
+  role     String?   // "Propietario", "Administrador", "Familia", "Socio"
+  email    String?
+  phone    String?
+  
+  // Whether this person is linked to a platform user account
+  userId   String?  @db.Uuid
+  
+  isActive  Boolean  @default(true)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([wumId])
+  @@map("decision_makers")
+}
+
+// =============================================================================
+// PHASE 2B: FARMS (PREDIOS)
+// =============================================================================
+
+/// A farm (predio) belongs to a Whole Under Management.
+/// Represents a physical piece of land with location, area, and climate data.
+model Farm {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  wumId String @db.Uuid
+  wum   WholeUnderManagement @relation(fields: [wumId], references: [id], onDelete: Cascade)
+
+  name        String
+  description String? @db.Text
+
+  // Location
+  country    String  @default("CL")
+  region     String?          // Región / Estado / Provincia
+  commune    String?          // Comuna / Municipio / Condado
+  address    String?
+  latitude   Float?
+  longitude  Float?
+
+  // Area
+  totalAreaHa Float?          // Superficie total del predio en hectáreas
+  usableAreaHa Float?         // Superficie utilizable (excluye infraestructura, bosque nativo protegido, etc.)
+
+  // Climate
+  climateZone     String?     // "Mediterráneo", "Semiárido", "Templado lluvioso", etc.
+  avgAnnualTempC  Float?      // Temperatura promedio anual en °C
+  annualRainfallMm Float?     // Precipitación promedio anual en mm
+  frostFreeDays    Int?       // Días libres de helada al año
+
+  // Soil
+  predominantSoilType String? // "Franco arcilloso", "Arenoso", "Volcánico", etc.
+  soilDepthCm         Int?    // Profundidad promedio del suelo en cm
+  organicMatterPct    Float?  // % materia orgánica estimada
+
+  // Water
+  waterSource    String?      // "Pozo profundo", "Canal de riego", "Río", "Secano"
+  irrigationType String?      // "Goteo", "Aspersión", "Surco", "Sin riego"
+  hasWaterRights Boolean @default(false)
+
+  // Elevation
+  elevationM     Int?         // Altitud en metros sobre nivel del mar
+
+  // Status
+  isActive  Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([wumId])
+  @@index([tenantId, isActive])
+  @@map("farms")
+}
+
+// =============================================================================
+// AUDIT LOG — Tenant-scoped activity tracking
+// =============================================================================
+
+model AuditLog {
+  id       String @id @default(uuid()) @db.Uuid
+  
+  tenantId String @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  
+  userId   String?  @db.Uuid  // null for system actions
+  action   String              // "user.invited", "tenant.updated", etc.
+  entity   String              // "tenant", "user", "farm", etc.
+  entityId String?  @db.Uuid
+  
+  metadata Json    @default("{}")  // Before/after values, extra context
+  
+  ipAddress String?
+  userAgent String?
+  
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([tenantId, entity])
+  @@index([tenantId, createdAt])
+  @@map("audit_logs")
+}

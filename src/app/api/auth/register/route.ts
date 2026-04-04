@@ -1,0 +1,77 @@
+// =============================================================================
+// POST /api/auth/register — User registration
+// =============================================================================
+
+import { NextRequest } from "next/server";
+import bcrypt from "bcryptjs";
+import { prisma } from "@/lib/db/prisma";
+import { registerSchema } from "@/lib/validations/schemas";
+import { apiResponse, apiError } from "@/lib/utils";
+import { APP_CONFIG } from "@/config/app";
+import { PlatformRole } from "@prisma/client";
+
+export async function POST(req: NextRequest) {
+  try {
+    // Check if registration is enabled
+    if (!APP_CONFIG.features.registration) {
+      return apiError("El registro está deshabilitado", 403);
+    }
+
+    const body = await req.json();
+    const validation = registerSchema.safeParse(body);
+
+    if (!validation.success) {
+      return apiError(
+        validation.error.errors.map((e) => e.message).join(", "),
+        400
+      );
+    }
+
+    const { name, email, password } = validation.data;
+
+    // Check if user already exists
+    const existingUser = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true },
+    });
+
+    if (existingUser) {
+      return apiError("Ya existe una cuenta con este email", 409);
+    }
+
+    // Hash password
+    const passwordHash = await bcrypt.hash(password, 12);
+
+    // Determine platform role
+    const platformRole =
+      process.env.PLATFORM_ADMIN_EMAIL &&
+      email === process.env.PLATFORM_ADMIN_EMAIL.toLowerCase()
+        ? PlatformRole.SUPER_ADMIN
+        : PlatformRole.USER;
+
+    // Create user
+    const user = await prisma.user.create({
+      data: {
+        name,
+        email,
+        passwordHash,
+        platformRole,
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        platformRole: true,
+        createdAt: true,
+      },
+    });
+
+    return apiResponse(
+      { user, message: "Cuenta creada exitosamente" },
+      201
+    );
+  } catch (error) {
+    console.error("Registration error:", error);
+    return apiError("Error interno del servidor", 500);
+  }
+}
