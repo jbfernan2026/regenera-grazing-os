@@ -57,6 +57,13 @@ const navigation = [
     requiresTenant: false,
   },
   {
+    label: "Administración",
+    href: "/dashboard/admin",
+    icon: Users,
+    requiresTenant: false,
+    adminOnly: true,
+  },
+  {
     label: "Entero Bajo Manejo",
     href: "/dashboard/wum",
     icon: Layers,
@@ -151,9 +158,14 @@ export function DashboardShell({
     router.refresh();
   }
 
-  const filteredNav = navigation.filter(
-    (item) => (item.phase ?? 1) <= currentPhase
-  );
+  const filteredNav = navigation.filter((item) => {
+  // Mostrar admin solo si es SUPER_ADMIN
+  if (item.adminOnly) {
+    return user.email === process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAIL ||
+           user.email === "jaime@revolucionmarron.cl";
+  }
+  return (item.phase ?? 1) <= currentPhase;
+});
 
   return (
     <div className="min-h-screen bg-background">

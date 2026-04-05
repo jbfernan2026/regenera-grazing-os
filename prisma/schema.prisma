@@ -1,9 +1,6 @@
 // =============================================================================
 // Regenera Grazing OS — Prisma Schema (Phase 1)
 // =============================================================================
-// Multi-tenant SaaS: single database + tenant_id strategy
-// All tenant-scoped tables include tenantId for Row Level Security
-// =============================================================================
 
 generator client {
   provider        = "prisma-client-js"
@@ -18,7 +15,7 @@ datasource db {
 }
 
 // =============================================================================
-// PLATFORM LEVEL — Not tenant-scoped
+// PLATFORM LEVEL
 // =============================================================================
 
 model Plan {
@@ -48,7 +45,7 @@ model Plan {
 }
 
 // =============================================================================
-// TENANT LEVEL — Organization / Company
+// TENANT LEVEL
 // =============================================================================
 
 model Tenant {
@@ -90,7 +87,7 @@ enum SubscriptionStatus {
 }
 
 // =============================================================================
-// USER & AUTH — NextAuth.js compatible + multi-tenant membership
+// USER & AUTH
 // =============================================================================
 
 model User {
@@ -202,7 +199,7 @@ model VerificationToken {
 }
 
 // =============================================================================
-// PHASE 2A: WHOLE UNDER MANAGEMENT + HOLISTIC CONTEXT
+// PHASE 2A: WHOLE UNDER MANAGEMENT
 // =============================================================================
 
 model WholeUnderManagement {
@@ -268,7 +265,7 @@ model DecisionMaker {
 }
 
 // =============================================================================
-// PHASE 2B: FARMS (PREDIOS)
+// PHASE 2B: FARMS
 // =============================================================================
 
 model Farm {
@@ -308,7 +305,7 @@ model Farm {
 }
 
 // =============================================================================
-// AUDIT LOG — Tenant-scoped activity tracking
+// AUDIT LOG
 // =============================================================================
 
 model AuditLog {
@@ -327,4 +324,32 @@ model AuditLog {
   @@index([tenantId, entity])
   @@index([tenantId, createdAt])
   @@map("audit_logs")
+}
+
+// =============================================================================
+// EMAIL LOGGING
+// =============================================================================
+
+model EmailLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  recipientEmail String
+  subject        String
+  type           String
+  status    EmailStatus @default(PENDING)
+  sentAt    DateTime?
+  error     String?
+  metadata  Json      @default("{}")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  @@index([recipientEmail])
+  @@index([type])
+  @@index([status])
+  @@map("email_logs")
+}
+
+enum EmailStatus {
+  PENDING
+  SENT
+  FAILED
+  BOUNCED
 }

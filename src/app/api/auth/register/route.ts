@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db/prisma";
 import { apiResponse, apiError } from "@/lib/utils";
 import { PlatformRole, RegistrationStatus } from "@prisma/client";
 import { z } from "zod";
+import { sendEmail } from "@/lib/email/service";
 
 export async function POST(req: NextRequest) {
   try {
@@ -81,7 +82,18 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    // Enviar email de confirmación
     if (registrationStatus === RegistrationStatus.PENDING_APPROVAL) {
+      await sendEmail({
+        to: email,
+        subject: "Tu registro en Regenera Grazing OS está pendiente de aprobación",
+        type: "approval",
+        data: {
+          userName: name,
+          message: "Tu cuenta ha sido creada. El administrador la revisará pronto.",
+        },
+      });
+
       return apiResponse(
         {
           user,
