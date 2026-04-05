@@ -71,7 +71,6 @@ const authConfig: NextAuthConfig = {
             id: true,
             name: true,
             email: true,
-            image: true,
             passwordHash: true,
             platformRole: true,
             isActive: true,

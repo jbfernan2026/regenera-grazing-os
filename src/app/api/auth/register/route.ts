@@ -1,24 +1,31 @@
-// =============================================================================
-// POST /api/auth/register — User registration
-// =============================================================================
-
 import { NextRequest } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db/prisma";
-import { registerSchema } from "@/lib/validations/schemas";
 import { apiResponse, apiError } from "@/lib/utils";
-import { APP_CONFIG } from "@/config/app";
-import { PlatformRole } from "@prisma/client";
+import { PlatformRole, RegistrationStatus } from "@prisma/client";
+import { z } from "zod";
 
 export async function POST(req: NextRequest) {
   try {
-    // Check if registration is enabled
-    if (!APP_CONFIG.features.registration) {
-      return apiError("El registro está deshabilitado", 403);
-    }
-
     const body = await req.json();
-    const validation = registerSchema.safeParse(body);
+
+    // Validar solo los campos que enviamos desde el frontend
+    const validation = z.object({
+      name: z
+        .string()
+        .min(1, "El nombre es requerido")
+        .min(2, "El nombre debe tener al menos 2 caracteres")
+        .max(100, "El nombre es demasiado largo"),
+      email: z
+        .string()
+        .min(1, "El email es requerido")
+        .email("Email inválido")
+        .transform((v) => v.toLowerCase().trim()),
+      password: z
+        .string()
+        .min(8, "La contraseña debe tener al menos 8 caracteres")
+        .max(72, "La contraseña es demasiado larga"),
+    }).safeParse(body);
 
     if (!validation.success) {
       return apiError(
@@ -49,6 +56,12 @@ export async function POST(req: NextRequest) {
         ? PlatformRole.SUPER_ADMIN
         : PlatformRole.USER;
 
+    // Determine registration status
+    const registrationStatus =
+      platformRole === PlatformRole.SUPER_ADMIN
+        ? RegistrationStatus.APPROVED
+        : RegistrationStatus.PENDING_APPROVAL;
+
     // Create user
     const user = await prisma.user.create({
       data: {
@@ -56,18 +69,36 @@ export async function POST(req: NextRequest) {
         email,
         passwordHash,
         platformRole,
+        registrationStatus,
       },
       select: {
         id: true,
         name: true,
         email: true,
         platformRole: true,
+        registrationStatus: true,
         createdAt: true,
       },
     });
 
+    if (registrationStatus === RegistrationStatus.PENDING_APPROVAL) {
+      return apiResponse(
+        {
+          user,
+          status: "PENDING_APPROVAL",
+          redirectTo: "/registration-pending",
+          message: "Cuenta creada. Esperando aprobación del administrador.",
+        },
+        201
+      );
+    }
+
     return apiResponse(
-      { user, message: "Cuenta creada exitosamente" },
+      {
+        user,
+        status: "APPROVED",
+        message: "Cuenta creada exitosamente",
+      },
       201
     );
   } catch (error) {

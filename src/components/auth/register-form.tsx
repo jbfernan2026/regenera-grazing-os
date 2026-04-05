@@ -1,175 +1,187 @@
 "use client";
 
-import React, { useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { signIn } from "next-auth/react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { registerSchema, type RegisterInput } from "@/lib/validations/schemas";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent } from "@/components/ui/card";
-import { Loader2, AlertCircle } from "lucide-react";
-import Link from "next/link";
 
 export function RegisterForm() {
   const router = useRouter();
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors, isSubmitting },
-  } = useForm<RegisterInput>({
-    resolver: zodResolver(registerSchema),
-  });
-
-  async function onSubmit(data: RegisterInput) {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     setError(null);
+    setLoading(true);
 
     try {
-      // 1. Register the user
-      const res = await fetch("/api/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-
-      const result = await res.json();
-
-      if (!res.ok) {
-        setError(result.error ?? "Error al crear la cuenta");
+      // Validaciones básicas
+      if (!name.trim()) {
+        setError("El nombre es requerido");
+        setLoading(false);
         return;
       }
 
-      // 2. Auto-login after registration
-      const signInResult = await signIn("credentials", {
-        email: data.email,
-        password: data.password,
-        redirect: false,
+      if (!email.trim()) {
+        setError("El email es requerido");
+        setLoading(false);
+        return;
+      }
+
+      if (!password) {
+        setError("La contraseña es requerida");
+        setLoading(false);
+        return;
+      }
+
+      if (password.length < 8) {
+        setError("La contraseña debe tener al menos 8 caracteres");
+        setLoading(false);
+        return;
+      }
+
+      if (password !== confirmPassword) {
+        setError("Las contraseñas no coinciden");
+        setLoading(false);
+        return;
+      }
+
+      // Enviar al API
+      const response = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          email: email.toLowerCase().trim(),
+          password,
+        }),
       });
 
-      if (signInResult?.error) {
-        // Registration worked but auto-login failed
+      const data = await response.json();
+
+console.log("API Response:", { status: response.status, data });
+
+if (!response.ok) {
+  const errorMsg = data.error || data.message || "Error en el registro";
+  console.error("API Error:", errorMsg);
+  setError(errorMsg);
+  setLoading(false);
+  return;
+}
+
+      // Si el status es PENDING_APPROVAL, redirigir a página de confirmación
+      if (data.status === "PENDING_APPROVAL") {
+  console.log("Redirigiendo a /registration-pending");
+  setTimeout(() => {
+    router.push("/registration-pending");
+  }, 500);
+  return;
+}
+
+      // Si es APPROVED, redirigir al login
+      if (data.status === "APPROVED") {
         router.push("/login");
         return;
       }
 
-      router.push("/dashboard");
-      router.refresh();
-    } catch {
-      setError("Error de conexión. Intenta de nuevo.");
+      // Fallback
+      router.push("/login");
+    } catch (err) {
+      setError("Error en el registro. Intenta de nuevo.");
+      console.error(err);
+      setLoading(false);
     }
-  }
+  };
 
   return (
-    <Card className="border-white/10 bg-white/5 backdrop-blur-xl shadow-2xl">
-      <CardContent className="pt-6">
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          {error && (
-            <div className="flex items-center gap-2 rounded-lg border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200">
-              <AlertCircle className="h-4 w-4 shrink-0" />
-              {error}
-            </div>
-          )}
+    <form onSubmit={handleSubmit} className="space-y-4">
+      {error && (
+        <div className="bg-red-500 bg-opacity-20 border border-red-500 text-red-200 px-4 py-3 rounded">
+          {error}
+        </div>
+      )}
 
-          <div className="space-y-2">
-            <Label htmlFor="name" className="text-white/80">
-              Nombre completo
-            </Label>
-            <Input
-              id="name"
-              type="text"
-              placeholder="Juan Pérez"
-              autoComplete="name"
-              className="border-white/10 bg-white/5 text-white placeholder:text-white/30 focus:border-regenera-400"
-              {...register("name")}
-            />
-            {errors.name && (
-              <p className="text-xs text-red-300">{errors.name.message}</p>
-            )}
-          </div>
+      <div>
+        <Label htmlFor="name" className="text-green-100">
+          Nombre completo
+        </Label>
+        <Input
+          id="name"
+          type="text"
+          placeholder="Juan Pérez"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          disabled={loading}
+          className="bg-green-700 border-green-600 text-white placeholder-green-400"
+        />
+      </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="email" className="text-white/80">
-              Email
-            </Label>
-            <Input
-              id="email"
-              type="email"
-              placeholder="tu@email.com"
-              autoComplete="email"
-              className="border-white/10 bg-white/5 text-white placeholder:text-white/30 focus:border-regenera-400"
-              {...register("email")}
-            />
-            {errors.email && (
-              <p className="text-xs text-red-300">{errors.email.message}</p>
-            )}
-          </div>
+      <div>
+        <Label htmlFor="email" className="text-green-100">
+          Email
+        </Label>
+        <Input
+          id="email"
+          type="email"
+          placeholder="tu@email.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          disabled={loading}
+          className="bg-green-700 border-green-600 text-white placeholder-green-400"
+        />
+      </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="password" className="text-white/80">
-              Contraseña
-            </Label>
-            <Input
-              id="password"
-              type="password"
-              placeholder="Mínimo 8 caracteres"
-              autoComplete="new-password"
-              className="border-white/10 bg-white/5 text-white placeholder:text-white/30 focus:border-regenera-400"
-              {...register("password")}
-            />
-            {errors.password && (
-              <p className="text-xs text-red-300">{errors.password.message}</p>
-            )}
-          </div>
+      <div>
+        <Label htmlFor="password" className="text-green-100">
+          Contraseña
+        </Label>
+        <Input
+          id="password"
+          type="password"
+          placeholder="••••••••"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          disabled={loading}
+          className="bg-green-700 border-green-600 text-white placeholder-green-400"
+        />
+      </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="confirmPassword" className="text-white/80">
-              Confirmar contraseña
-            </Label>
-            <Input
-              id="confirmPassword"
-              type="password"
-              placeholder="Repite tu contraseña"
-              autoComplete="new-password"
-              className="border-white/10 bg-white/5 text-white placeholder:text-white/30 focus:border-regenera-400"
-              {...register("confirmPassword")}
-            />
-            {errors.confirmPassword && (
-              <p className="text-xs text-red-300">
-                {errors.confirmPassword.message}
-              </p>
-            )}
-          </div>
+      <div>
+        <Label htmlFor="confirmPassword" className="text-green-100">
+          Confirmar contraseña
+        </Label>
+        <Input
+          id="confirmPassword"
+          type="password"
+          placeholder="••••••••"
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
+          disabled={loading}
+          className="bg-green-700 border-green-600 text-white placeholder-green-400"
+        />
+      </div>
 
-          <Button
-            type="submit"
-            className="w-full bg-regenera-600 hover:bg-regenera-500 text-white"
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Creando cuenta...
-              </>
-            ) : (
-              "Crear Cuenta"
-            )}
-          </Button>
+      <Button 
+        type="submit" 
+        disabled={loading} 
+        className="w-full bg-green-600 hover:bg-green-700"
+      >
+        {loading ? "Creando cuenta..." : "Registrarse"}
+      </Button>
 
-          <p className="text-center text-sm text-white/50">
-            ¿Ya tienes cuenta?{" "}
-            <Link
-              href="/login"
-              className="text-regenera-300 hover:text-regenera-200 underline-offset-4 hover:underline"
-            >
-              Inicia sesión
-            </Link>
-          </p>
-        </form>
-      </CardContent>
-    </Card>
+      <p className="text-center text-sm text-green-200">
+        ¿Ya tienes cuenta?{" "}
+        <Link href="/login" className="text-green-400 hover:text-green-300 underline">
+          Inicia sesión
+        </Link>
+      </p>
+    </form>
   );
 }

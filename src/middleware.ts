@@ -11,7 +11,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 // Routes that don't require authentication
-const PUBLIC_ROUTES = ["/login", "/register", "/api/auth", "/api/health"];
+const PUBLIC_ROUTES = ["/login", "/register", "/registration-pending", "/api/auth", "/api/health"];
 
 // Static assets and Next.js internals
 const IGNORED_PATHS = ["/_next", "/favicon.ico", "/images", "/icons"];

@@ -39,18 +39,13 @@ export const registerSchema = z
     password: z
       .string()
       .min(8, "La contraseña debe tener al menos 8 caracteres")
-      .max(72, "La contraseña es demasiado larga")
-      .regex(
-        /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
-        "Debe incluir mayúscula, minúscula y número"
-      ),
+      .max(72, "La contraseña es demasiado larga"),
     confirmPassword: z.string().min(1, "Confirma tu contraseña"),
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: "Las contraseñas no coinciden",
     path: ["confirmPassword"],
   });
-
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
 
