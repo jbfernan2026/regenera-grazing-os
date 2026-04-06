@@ -6,50 +6,68 @@ const prisma = new PrismaClient();
 async function main() {
   console.log("🌱 Seeding database...");
 
-  // Create Plans
-  const starter = await prisma.plan.upsert({
-    where: { name: "starter" },
+  // ===== CREATE PLANS =====
+  const freePlan = await prisma.plan.upsert({
+    where: { name: "free" },
     update: {},
     create: {
-      name: "starter",
-      displayName: "Starter",
-      description: "Plan básico para comenzar",
+      name: "free",
+      displayName: "Gratis",
+      description: "Para empezar",
       maxUsers: 3,
       maxFarms: 1,
-      maxPaddocks: 20,
+      maxPaddocks: 5,
+      maxStorage: 1024,
+      gisAdvanced: false,
+      longTermMonitoring: false,
+      documentUpload: false,
+      traceabilityLayer: false,
+      exportAdvanced: false,
+      apiAccess: false,
+      whiteLabel: false,
       priceMonthly: 0,
+      priceYearly: 0,
       isActive: true,
       sortOrder: 1,
     },
   });
 
-  const professional = await prisma.plan.upsert({
-    where: { name: "professional" },
+  const starterPlan = await prisma.plan.upsert({
+    where: { name: "starter" },
     update: {},
     create: {
-      name: "professional",
-      displayName: "Professional",
-      description: "Plan profesional con más features",
+      name: "starter",
+      displayName: "Starter",
+      description: "Para crecer",
       maxUsers: 10,
-      maxFarms: 5,
-      maxPaddocks: 100,
+      maxFarms: 2,
+      maxPaddocks: 15,
+      maxStorage: 10240,
       gisAdvanced: true,
-      priceMonthly: 2900,
+      longTermMonitoring: true,
+      documentUpload: true,
+      traceabilityLayer: false,
+      exportAdvanced: false,
+      apiAccess: false,
+      whiteLabel: false,
+      priceMonthly: 4900,
+      priceYearly: 49000,
       isActive: true,
       sortOrder: 2,
     },
   });
 
-  const enterprise = await prisma.plan.upsert({
-    where: { name: "enterprise" },
+  const premiumPlan = await prisma.plan.upsert({
+    where: { name: "premium" },
     update: {},
     create: {
-      name: "enterprise",
-      displayName: "Enterprise",
-      description: "Plan empresarial con todas las features",
-      maxUsers: 100,
-      maxFarms: 50,
-      maxPaddocks: 1000,
+      name: "premium",
+      displayName: "Premium",
+      description: "Para empresas",
+      maxUsers: 20,
+      maxFarms: 5,
+      maxPaddocks: 100,
+      maxStorage: 102400,
       gisAdvanced: true,
       longTermMonitoring: true,
       documentUpload: true,
@@ -58,38 +76,39 @@ async function main() {
       apiAccess: true,
       whiteLabel: true,
       priceMonthly: 9900,
+      priceYearly: 99000,
       isActive: true,
       sortOrder: 3,
     },
   });
 
-  // Create Super Admin User
-  const superAdminEmail = process.env.PLATFORM_ADMIN_EMAIL || "jaime@revolucionmarron.cl";
-  const passwordHash = await bcrypt.hash("Regenera2024!", 12);
+  console.log("✅ Plans created");
 
-  const superAdmin = await prisma.user.upsert({
-    where: { email: superAdminEmail },
-    update: { passwordHash },
+  // ===== CREATE SUPER ADMIN USER =====
+  const adminPassword = await bcrypt.hash("Regenera2024!", 12);
+  const adminUser = await prisma.user.upsert({
+    where: { email: process.env.PLATFORM_ADMIN_EMAIL || "admin@regenera.com" },
+    update: {},
     create: {
-      email: superAdminEmail,
-      name: "Jaime Fernández",
-      passwordHash,
+      email: process.env.PLATFORM_ADMIN_EMAIL || "admin@regenera.com",
+      name: "Super Admin",
+      passwordHash: adminPassword,
       platformRole: "SUPER_ADMIN",
       registrationStatus: "APPROVED",
       isActive: true,
     },
   });
 
-  console.log("✅ Plans created");
-  console.log("✅ Super Admin created:", superAdmin.email);
-  console.log("🎉 Seeding complete!");
+  console.log("✅ Admin user created:", adminUser.email);
 }
 
 main()
-  .catch((e) => {
-    console.error("❌ Seeding error:", e);
-    process.exit(1);
-  })
-  .finally(async () => {
+  .then(async () => {
     await prisma.$disconnect();
+    console.log("🎉 Seeding complete!");
+  })
+  .catch(async (e) => {
+    console.error("❌ Seed error:", e);
+    await prisma.$disconnect();
+    process.exit(1);
   });

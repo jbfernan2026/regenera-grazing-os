@@ -71,7 +71,7 @@ export async function sendEmail(options: EmailOptions) {
 
     // Enviar con Resend
     const result = await resend.emails.send({
-      from: "noreply@regeneragrazing.com",
+      from: "onboarding@resend.dev",
       to,
       subject,
       html: htmlContent,
