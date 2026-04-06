@@ -16,7 +16,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Loader2, AlertCircle, ArrowLeft, Check, Sparkles } from "lucide-react";
-import { LocationPicker } from "@/components/map/location-picker";
+import { FarmLocationSection } from "./farm-location-section";
 import Link from "next/link";
 
 interface WUMOption {
@@ -172,13 +172,12 @@ export function CreateFarmForm({ wums }: { wums: WUMOption[] }) {
               Busca tu predio o haz clic en el mapa. Los datos de clima, elevación y suelo se completarán automáticamente.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <LocationPicker
+<CardContent className="space-y-4">
+            <FarmLocationSection
               latitude={watchLat}
               longitude={watchLng}
               onLocationSelect={handleLocationSelect}
               onGeoDataFetched={handleGeoDataFetched}
-              height="400px"
             />
             {watchLat && watchLng && (
               <div className="flex items-center gap-4 text-sm">

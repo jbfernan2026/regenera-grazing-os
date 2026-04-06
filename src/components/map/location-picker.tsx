@@ -21,6 +21,9 @@ interface LocationPickerProps {
   latitude?: number;
   longitude?: number;
   onLocationChange?: (lat: number, lng: number) => void;
+  onLocationSelect?: (lat: number, lng: number) => void;
+  onGeoDataFetched?: (data: any) => void;
+  height?: string;
 }
 
 interface SearchResult {
@@ -43,17 +46,20 @@ export function LocationPicker({
   latitude = -33.8688,
   longitude = -71.5387,
   onLocationChange,
-}: LocationPickerProps) {
-  const [position, setPosition] = useState<[number, number]>([latitude, longitude]);
+  onLocationSelect,
+  onGeoDataFetched,
+  height = "400px",
+}: LocationPickerProps) {  const [position, setPosition] = useState<[number, number]>([latitude, longitude]);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showClimateData, setShowClimateData] = useState(true);
   const searchTimeoutRef = useRef<NodeJS.Timeout>();
 
-  const handleLocationChange = (lat: number, lng: number) => {
+const handleLocationChange = (lat: number, lng: number) => {
     setPosition([lat, lng]);
     onLocationChange?.(lat, lng);
+    onLocationSelect?.(lat, lng);
   };
 
   const searchLocation = async (query: string) => {
@@ -134,7 +140,7 @@ export function LocationPicker({
         )}
       </div>
 
-      <div className="h-96 rounded-lg overflow-hidden border-2 border-gray-300">
+      <div className="rounded-lg overflow-hidden border-2 border-gray-300" style={{ height: height || "400px" }}>
         <MapContainer
           center={position}
           zoom={10}
