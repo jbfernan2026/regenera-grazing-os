@@ -4,8 +4,8 @@ import { useState, useRef } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { ClimateDataDisplay } from "./climate-data-display";
 
-// Fix para iconos de Leaflet
 const defaultIcon = L.icon({
   iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png",
   shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png",
@@ -48,6 +48,7 @@ export function LocationPicker({
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [showClimateData, setShowClimateData] = useState(true);
   const searchTimeoutRef = useRef<NodeJS.Timeout>();
 
   const handleLocationChange = (lat: number, lng: number) => {
@@ -86,7 +87,6 @@ export function LocationPicker({
     const query = e.target.value;
     setSearchQuery(query);
 
-    // Debounce search
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
     }
@@ -103,9 +103,8 @@ export function LocationPicker({
   };
 
   return (
-    <div className="w-full">
-      {/* Search Bar */}
-      <div className="mb-4 relative">
+    <div className="w-full space-y-6">
+      <div className="relative">
         <input
           type="text"
           placeholder="Buscar ubicación (ej: Santiago, Chile)..."
@@ -119,7 +118,6 @@ export function LocationPicker({
           </div>
         )}
 
-        {/* Search Results Dropdown */}
         {searchResults.length > 0 && (
           <div className="absolute top-full left-0 right-0 mt-1 bg-white border-2 border-gray-300 rounded-lg shadow-lg z-50">
             {searchResults.map((result, idx) => (
@@ -136,8 +134,7 @@ export function LocationPicker({
         )}
       </div>
 
-      {/* Map */}
-      <div className="h-96 rounded-lg overflow-hidden border-2 border-gray-300 mb-4">
+      <div className="h-96 rounded-lg overflow-hidden border-2 border-gray-300">
         <MapContainer
           center={position}
           zoom={10}
@@ -158,23 +155,30 @@ export function LocationPicker({
         </MapContainer>
       </div>
 
-      {/* Coordinates Display */}
       <div className="bg-gray-50 p-4 rounded border border-gray-200">
-        <p className="text-sm font-medium text-gray-700 mb-2">Ubicación seleccionada:</p>
+        <p className="text-sm font-medium text-gray-700 mb-2">📌 Coordenadas:</p>
         <div className="grid grid-cols-2 gap-4">
           <div>
             <p className="text-xs text-gray-600">Latitud</p>
-            <p className="text-sm font-mono font-bold text-gray-900">{position[0].toFixed(6)}</p>
+            <p className="text-sm font-mono font-bold">{position[0].toFixed(6)}</p>
           </div>
           <div>
             <p className="text-xs text-gray-600">Longitud</p>
-            <p className="text-sm font-mono font-bold text-gray-900">{position[1].toFixed(6)}</p>
+            <p className="text-sm font-mono font-bold">{position[1].toFixed(6)}</p>
           </div>
         </div>
-        <p className="text-xs text-gray-500 mt-3">
-          💡 Busca una ubicación arriba, haz clic en el mapa, o arrastra el marcador
-        </p>
       </div>
+
+      <button
+        onClick={() => setShowClimateData(!showClimateData)}
+        className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg"
+      >
+        {showClimateData ? "🔽 Ocultar" : "🔼 Mostrar"} Datos Climáticos
+      </button>
+
+      {showClimateData && (
+        <ClimateDataDisplay latitude={position[0]} longitude={position[1]} />
+      )}
     </div>
   );
 }
